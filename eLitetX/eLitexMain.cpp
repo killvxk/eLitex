@@ -50,20 +50,15 @@ int init() {
 	string truncPolicDst = "";
 	string truncPolicSrc = "";
 
-		retrv();
-		truncPolicDst = readParam(tarAddrIn, JIMMY_DST) + " and " + readParam(tarPortIn, JIMMY_DST);
-		truncPolicSrc = readParam(tarAddrIn, JIMMY_SRC) + " and " + readParam(tarPortIn, JIMMY_SRC);
+	retrv();
+	truncPolicDst = readParam(tarAddrIn, JIMMY_DST) + " and " + readParam(tarPortIn, JIMMY_DST);
+	truncPolicSrc = readParam(tarAddrIn, JIMMY_SRC) + " and " + readParam(tarPortIn, JIMMY_SRC);
 
-	printf("Welcome!\n");
-	printf("eLitet Insiders Packet forwarding console.\n");
-	printf("%s\n", truncPolicDst.c_str());
-	printf("%s", truncPolicSrc.c_str());
-	printf(" to %u\n", htons(tar_port));
 	handleDst = WinDivertOpen(truncPolicDst.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
 	handleSrc = WinDivertOpen(truncPolicSrc.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
 
 	if (handleDst == INVALID_HANDLE_VALUE)
-		printf("\t ERROR: %i", GetLastError());
+		exit(1);
 
 	thread asyncDst(intercpt, JIMMY_DST, handleDst);
 	thread asyncSrc(intercpt, JIMMY_SRC, handleSrc);
@@ -126,21 +121,12 @@ void intercpt(int opt, HANDLE handel) {
 		WinDivertRecv(handel, packet, sizeof(packet), &windivt_addr, &packetLen);
 		WinDivertHelperParsePacket(packet, packetLen, &ip_header, NULL, NULL, NULL, &tcp_header, NULL, NULL, NULL);
 
-		if (opt == JIMMY_DST) {
+		if (opt == JIMMY_DST)
 			tcp_header->DstPort = tar_port;
-			if (verbose) {
-				printf("<%s:%u>", "DST", ntohs(tar_port));
-				printf("[to %u]", ntohs(tcp_header->DstPort));
-			}
-		}
-		else if (opt == JIMMY_SRC) {
+
+		else if (opt == JIMMY_SRC)
 			tcp_header->SrcPort = tar_port_origin;
-			if (verbose) {
-				printf("!");
-				printf("<%s:%u>", "SRC", ntohs(tar_port_origin));
-				printf("[to %u]\n", ntohs(tcp_header->SrcPort));
-			}
-		}
+
 		WinDivertHelperCalcChecksums((PVOID)packet, packetLen, &windivt_addr, 0);
 		WinDivertSend(handel, packet, packetLen, &windivt_addr, NULL);
 
@@ -165,7 +151,6 @@ int retrv() {
 	FIXED_INFO *pFixedInfo;
 	ULONG ulOutBufLen;
 	DWORD dwRetVal;
-	IP_ADDR_STRING *pIPAddr;
 
 	pFixedInfo = (FIXED_INFO *)MALLOC(sizeof(FIXED_INFO));
 	if (pFixedInfo == NULL)
@@ -183,17 +168,14 @@ int retrv() {
 	}
 
 	if (dwRetVal = GetNetworkParams(pFixedInfo, &ulOutBufLen) == NO_ERROR) {
-		//printf("\t%s\n", pFixedInfo->DnsServerList.IpAddress.String);
 
 		pSrvList->AddrArray[0] = inet_addr(pFixedInfo->DnsServerList.IpAddress.String); //DNS (ASCII) to IP address
 		pSrvList->AddrCount = 1;
 
-		//printf("Querying DNS Server: %s\n", ns);
-
 		dnsStatus = DnsQuery(
 			eltxToken.c_str(),
 			DNS_TYPE_A,
-			DNS_QUERY_STANDARD, // TCP Queries 
+			DNS_QUERY_STANDARD, // TCP Queries?
 			pSrvList, // Documented as reserved, but can take a PIP4_ARRAY for the DNS server
 			&ppQueryResultsSet,
 			NULL); // Reserved
@@ -201,11 +183,10 @@ int retrv() {
 		dnsStatus = DnsQuery(
 			eltxToken.c_str(),
 			DNS_TYPE_TEXT,
-			DNS_QUERY_STANDARD, // TCP Queries 
+			DNS_QUERY_STANDARD, // TCP Queries?
 			pSrvList, // Documented as reserved, but can take a PIP4_ARRAY for the DNS server
 			&ppQueryResultsSetPort,
 			NULL); // Reserved
-
 
 		if (dnsStatus)
 			ready = false;
@@ -239,7 +220,6 @@ int retrv() {
 			tarPortIn = _strdup(tarPortIn_.c_str());
 			configRead.close();
 		}
-
-		return 0;
 	}
+	return 0;
 }
