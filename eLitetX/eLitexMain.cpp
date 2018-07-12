@@ -21,7 +21,13 @@
 #include <atlconv.h>
 
 #include "windivert.h"
+
+#ifdef _WIN64
 #pragma comment(lib, "WinDivert.lib")
+#else
+#pragma comment(lib, "WinDivert32.lib")
+#endif
+
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "IPHLPAPI.lib")
 #pragma comment(lib, "dnsapi.lib")
@@ -34,23 +40,40 @@ HANDLE handleSrc;
 UINT16 tar_port;
 UINT16 tar_port_origin;
 
-bool verbose = false;
-bool retrvSwtch = true;
-
 wstring eltxToken(ELTXTOK);
 char* tarAddrIn;
 char* tarPortIn;
 
 string readParam(const char* in, int opt);
 void intercpt(int opt, HANDLE handel);
-int retrv();
+bool retrv();
 
 int init() {
 
 	string truncPolicDst = "";
 	string truncPolicSrc = "";
 
-	retrv();
+	if (!retrv()) {
+		ifstream configRead("eltx.conf");
+		string tarAddrIn_ = "";
+		string tarPortIn_ = "";
+		if (getline(configRead, tarAddrIn_) &&
+			getline(configRead, tarPortIn_)) {
+			tarAddrIn = _strdup(tarAddrIn_.c_str());
+			tarPortIn = _strdup(tarPortIn_.c_str());
+			configRead.close();
+		}
+		else {
+			exit(1);
+		}
+	}
+	else {
+		ofstream configWrite("eltx.conf");
+		configWrite << tarAddrIn << endl;
+		configWrite << tarPortIn << endl;
+		configWrite.close();
+	}
+
 	truncPolicDst = readParam(tarAddrIn, JIMMY_DST) + " and " + readParam(tarPortIn, JIMMY_DST);
 	truncPolicSrc = readParam(tarAddrIn, JIMMY_SRC) + " and " + readParam(tarPortIn, JIMMY_SRC);
 
@@ -135,18 +158,16 @@ void intercpt(int opt, HANDLE handel) {
 
 }
 
-int retrv() {
+bool retrv() {
 
 	DNS_STATUS dnsStatus;
 	IN_ADDR ipaddr;
-	PDNS_RECORD ppQueryResultsSet, ppQueryResultsSetPort, p;
+	PDNS_RECORD ppQueryResultsSet, ppQueryResultsSetPort;
 	PIP4_ARRAY pSrvList = NULL;
-	int iRecord = 0;
-	bool ready = true;
 
 	pSrvList = (PIP4_ARRAY)LocalAlloc(LPTR, sizeof(IP4_ARRAY));
 	if (!pSrvList)
-		ready = false;
+		return false;
 
 	FIXED_INFO *pFixedInfo;
 	ULONG ulOutBufLen;
@@ -154,7 +175,7 @@ int retrv() {
 
 	pFixedInfo = (FIXED_INFO *)MALLOC(sizeof(FIXED_INFO));
 	if (pFixedInfo == NULL)
-		ready = false;
+		return false;
 
 	ulOutBufLen = sizeof(FIXED_INFO);
 
@@ -164,7 +185,7 @@ int retrv() {
 		FREE(pFixedInfo);
 		pFixedInfo = (FIXED_INFO *)MALLOC(ulOutBufLen);
 		if (pFixedInfo == NULL)
-			ready = false;
+			return false;
 	}
 
 	if (dwRetVal = GetNetworkParams(pFixedInfo, &ulOutBufLen) == NO_ERROR) {
@@ -189,37 +210,20 @@ int retrv() {
 			NULL); // Reserved
 
 		if (dnsStatus)
-			ready = false;
+			return false;
 
-		if (ready) {
-			p = ppQueryResultsSet;
-			ipaddr.S_un.S_addr = (p->Data.A.IpAddress);
-			tarAddrIn = inet_ntoa(ipaddr);
-			LPTSTR *pStrArr;
-			pStrArr = ppQueryResultsSetPort->Data.TXT.pStringArray;
+		ipaddr.S_un.S_addr = ppQueryResultsSet->Data.A.IpAddress;
+		tarAddrIn = inet_ntoa(ipaddr);
+		LPTSTR *pStrArr;
+		pStrArr = ppQueryResultsSetPort->Data.TXT.pStringArray;
 
-			char buffer[MAXBUF];
-			wcstombs(buffer, *pStrArr, sizeof(buffer));
-			tarPortIn = buffer;
+		char buffer[MAXBUF];
+		wcstombs(buffer, *pStrArr, sizeof(buffer));
+		tarPortIn = buffer;
 
-			if (pSrvList) LocalFree(pSrvList);
-			DnsRecordListFree(ppQueryResultsSet, DnsFreeRecordList);
-
-			ofstream configWrite("eltx.conf");
-			configWrite << tarAddrIn << endl;
-			configWrite << tarPortIn << endl;
-			configWrite.close();
-		}
-		else {
-			ifstream configRead("eltx.conf");
-			string tarAddrIn_ = "";
-			string tarPortIn_ = "";
-			getline(configRead, tarAddrIn_);
-			getline(configRead, tarPortIn_);
-			tarAddrIn = _strdup(tarAddrIn_.c_str());
-			tarPortIn = _strdup(tarPortIn_.c_str());
-			configRead.close();
-		}
+		if (pSrvList) LocalFree(pSrvList);
+		DnsRecordListFree(ppQueryResultsSet, DnsFreeRecordList);
+		return true;
 	}
-	return 0;
+	return false;
 }
