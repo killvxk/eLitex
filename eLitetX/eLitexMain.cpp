@@ -66,36 +66,37 @@ int init() {
 	}
 	else {
 		ofstream configWrite("eltx.conf");
+
+		string tarAddrInLangDst = "(";
+		string tarAddrInLangSrc = "(";
+
+		while (true) {
+			IN_ADDR ipaddr;
+			ipaddr.S_un.S_addr = (srvQueue->Data.A.IpAddress);
+			tarAddrInLangDst += readParam(inet_ntoa(ipaddr), JIMMY_DST);
+			tarAddrInLangSrc += readParam(inet_ntoa(ipaddr), JIMMY_SRC);
+
+			if (srvQueue->pNext) {
+				srvQueue = srvQueue->pNext;
+				tarAddrInLangDst += " or ";
+				tarAddrInLangSrc += " or ";
+			}
+			else
+				break;
+		}
+
+		DnsRecordListFree(srvQueue, DnsFreeRecordList);
+
+		tarAddrInLangDst += ")";
+		tarAddrInLangSrc += ")";
+
+		truncPolicDst = tarAddrInLangDst + " and " + readParam(tarPortIn, JIMMY_DST);
+		truncPolicSrc = tarAddrInLangSrc + " and " + readParam(tarPortIn, JIMMY_SRC);
+
 		configWrite << truncPolicDst << endl;
 		configWrite << truncPolicSrc << endl;
 		configWrite.close();
 	}
-
-	string tarAddrInLangDst = "(";
-	string tarAddrInLangSrc = "(";
-
-	while (true) {
-		IN_ADDR ipaddr;
-		ipaddr.S_un.S_addr = (srvQueue->Data.A.IpAddress);
-		tarAddrInLangDst += readParam(inet_ntoa(ipaddr), JIMMY_DST);
-		tarAddrInLangSrc += readParam(inet_ntoa(ipaddr), JIMMY_SRC);
-
-		if (srvQueue->pNext) {
-			srvQueue = srvQueue->pNext;
-			tarAddrInLangDst += " or ";
-			tarAddrInLangSrc += " or ";
-		}
-		else
-			break;
-	}
-
-	DnsRecordListFree(srvQueue, DnsFreeRecordList);
-
-	tarAddrInLangDst += ")";
-	tarAddrInLangSrc += ")";
-
-	truncPolicDst = tarAddrInLangDst + " and " + readParam(tarPortIn, JIMMY_DST);
-	truncPolicSrc = tarAddrInLangSrc + " and " + readParam(tarPortIn, JIMMY_SRC);
 
 	handleDst = WinDivertOpen(truncPolicDst.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
 	handleSrc = WinDivertOpen(truncPolicSrc.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
