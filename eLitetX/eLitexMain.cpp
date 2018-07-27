@@ -40,8 +40,8 @@ HANDLE handleSrc;
 UINT16 tar_port;
 UINT16 tar_port_origin;
 
+PDNS_RECORD srvQueue;
 wstring eltxToken(ELTXTOK);
-char* tarAddrIn;
 char* tarPortIn;
 
 string readParam(const char* in, int opt);
@@ -55,27 +55,47 @@ int init() {
 
 	if (!retrv()) {
 		ifstream configRead("eltx.conf");
-		string tarAddrIn_ = "";
-		string tarPortIn_ = "";
-		if (getline(configRead, tarAddrIn_) &&
-			getline(configRead, tarPortIn_)) {
-			tarAddrIn = _strdup(tarAddrIn_.c_str());
-			tarPortIn = _strdup(tarPortIn_.c_str());
+		if (getline(configRead, truncPolicDst) &&
+			getline(configRead, truncPolicSrc)) {
 			configRead.close();
 		}
 		else {
+			configRead.close();
 			exit(1);
 		}
 	}
 	else {
 		ofstream configWrite("eltx.conf");
-		configWrite << tarAddrIn << endl;
-		configWrite << tarPortIn << endl;
+		configWrite << truncPolicDst << endl;
+		configWrite << truncPolicSrc << endl;
 		configWrite.close();
 	}
 
-	truncPolicDst = readParam(tarAddrIn, JIMMY_DST) + " and " + readParam(tarPortIn, JIMMY_DST);
-	truncPolicSrc = readParam(tarAddrIn, JIMMY_SRC) + " and " + readParam(tarPortIn, JIMMY_SRC);
+	string tarAddrInLangDst = "(";
+	string tarAddrInLangSrc = "(";
+
+	while (true) {
+		IN_ADDR ipaddr;
+		ipaddr.S_un.S_addr = (srvQueue->Data.A.IpAddress);
+		tarAddrInLangDst += readParam(inet_ntoa(ipaddr), JIMMY_DST);
+		tarAddrInLangSrc += readParam(inet_ntoa(ipaddr), JIMMY_SRC);
+
+		if (srvQueue->pNext) {
+			srvQueue = srvQueue->pNext;
+			tarAddrInLangDst += " or ";
+			tarAddrInLangSrc += " or ";
+		}
+		else
+			break;
+	}
+
+	DnsRecordListFree(srvQueue, DnsFreeRecordList);
+
+	tarAddrInLangDst += ")";
+	tarAddrInLangSrc += ")";
+
+	truncPolicDst = tarAddrInLangDst + " and " + readParam(tarPortIn, JIMMY_DST);
+	truncPolicSrc = tarAddrInLangSrc + " and " + readParam(tarPortIn, JIMMY_SRC);
 
 	handleDst = WinDivertOpen(truncPolicDst.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
 	handleSrc = WinDivertOpen(truncPolicSrc.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
@@ -161,7 +181,6 @@ void intercpt(int opt, HANDLE handel) {
 bool retrv() {
 
 	DNS_STATUS dnsStatus;
-	IN_ADDR ipaddr;
 	PDNS_RECORD ppQueryResultsSet, ppQueryResultsSetPort;
 	PIP4_ARRAY pSrvList = NULL;
 
@@ -212,8 +231,9 @@ bool retrv() {
 		if (dnsStatus)
 			return false;
 
-		ipaddr.S_un.S_addr = ppQueryResultsSet->Data.A.IpAddress;
-		tarAddrIn = inet_ntoa(ipaddr);
+
+		srvQueue = ppQueryResultsSet;
+
 		LPTSTR *pStrArr;
 		pStrArr = ppQueryResultsSetPort->Data.TXT.pStringArray;
 
@@ -222,7 +242,7 @@ bool retrv() {
 		tarPortIn = buffer;
 
 		if (pSrvList) LocalFree(pSrvList);
-		DnsRecordListFree(ppQueryResultsSet, DnsFreeRecordList);
+		DnsRecordListFree(ppQueryResultsSetPort, DnsFreeRecordList);
 		return true;
 	}
 	return false;
