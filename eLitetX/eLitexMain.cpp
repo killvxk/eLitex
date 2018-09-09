@@ -11,27 +11,6 @@
 #include <fstream>
 #include <string>
 #include <thread>
-#include <Ws2tcpip.h>
-#include <winsock2.h>
-#include <windows.h>
-#include <iphlpapi.h>
-#include <WinDNS.h>
-
-#include <atlbase.h>
-#include <atlconv.h>
-
-#include "windivert.h"
-
-#ifdef _WIN64
-#pragma comment(lib, "WinDivert.lib")
-#else
-#pragma comment(lib, "WinDivert32.lib")
-#endif
-
-#pragma comment(lib, "Ws2_32.lib")
-#pragma comment(lib, "IPHLPAPI.lib")
-#pragma comment(lib, "dnsapi.lib")
-
 using namespace std;
 using std::ofstream;
 
